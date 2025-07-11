@@ -1,0 +1,17 @@
+# Ignore ChromaDB database and large binary files
+chroma_db/
+*.sqlite3
+*.bin
+*.pickle
+
+# Ignore Jupyter notebook checkpoints
+hp_books/.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
