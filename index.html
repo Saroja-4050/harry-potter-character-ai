@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Harry Potter Character Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Merriweather:wght@400;700&display=swap');
+    body {
+      font-family: 'Merriweather', serif;
+      background: linear-gradient(135deg, #2a0a3a 0%, #4a148c 50%, #6a1b9a 100%);
+      background-attachment: fixed;
+      color: #e0e0e0;
+    }
+    h1 {
+      font-family: 'Cinzel Decorative', cursive;
+      color: #ffc107;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    }
+    .chat-area::-webkit-scrollbar { width: 8px; }
+    .chat-area::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 10px; }
+    .chat-area::-webkit-scrollbar-thumb { background: #ffc107; border-radius: 10px; }
+    .chat-area::-webkit-scrollbar-thumb:hover { background: #ffeb3b; }
+
+    .themed-button {
+      background-color: #7b1fa2;
+      border: 2px solid #ffc107;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+      transition: all 0.2s;
+    }
+    .themed-button:hover {
+      background-color: #9c27b0;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 8px rgba(0,0,0,0.4);
+    }
+    .themed-button:disabled {
+      background-color: #5a127a;
+      border-color: #b8860b;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .themed-input {
+      background-color: rgba(255,255,255,0.1);
+      border: 1px solid #ffc107;
+      color: #e0e0e0;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .themed-input::placeholder { color: #a0a0a0; }
+    .themed-input:focus {
+      outline: none;
+      border-color: #ffeb3b;
+      box-shadow: 0 0 0 2px rgba(255,193,7,0.5);
+    }
+    .themed-input:disabled {
+      background-color: rgba(255,255,255,0.05);
+      border-color: #b8860b;
+      color: #a0a0a0;
+    }
+
+    .user-bubble {
+      background-color: #ffc107;
+      color: #333;
+      border-bottom-right-radius: 0;
+    }
+    .assistant-bubble {
+      background-color: #7b1fa2;
+      color: #e0e0e0;
+      border-bottom-left-radius: 0;
+    }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+  <div class="bg-gray-900 bg-opacity-80 p-8 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col space-y-6 border-2 border-yellow-600">
+    <div class="flex flex-col items-center">
+      <svg class="w-16 h-16 text-yellow-500 mb-4" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.309L18.414 7l-6.414 3.207L5.586 7 12 4.309zM4 8.5v6.98l8 4.008 8-4.008V8.5L12 12.5 4 8.5zm8 11.182L4 15.5V9.45l8 4.008 8-4.008v6.05L12 19.682z"/>
+      </svg>
+      <h1 class="text-4xl font-extrabold text-center mb-2">Chat with Harry Potter Characters</h1>
+      <p class="text-gray-300 text-center text-lg">
+        Select a character to begin your magical conversation!
+      </p>
+    </div>
+
+    <div class="flex flex-col sm:flex-row items-center gap-4">
+      <label for="character-select" class="text-lg font-medium text-yellow-400">Choose Character:</label>
+      <select id="character-select" class="flex-grow p-3 rounded-lg shadow-sm themed-input" disabled>
+        <option>Loading characters…</option>
+      </select>
+    </div>
+
+    <div id="chat-area" class="chat-area flex-grow h-96 bg-gray-800 bg-opacity-60 p-4 rounded-lg border border-yellow-700 overflow-y-auto flex flex-col space-y-4 shadow-inner">
+      <div id="initial-message" class="text-gray-400 text-center italic mt-auto">
+        Select a character to begin your magical conversation!
+      </div>
+    </div>
+
+    <div class="flex gap-3">
+      <input type="text" id="user-input"
+             class="flex-grow p-3 rounded-lg shadow-sm themed-input"
+             placeholder="Type your message here…"
+             disabled>
+      <button id="send-button"
+              class="themed-button text-white font-bold py-3 px-6 rounded-lg disabled:opacity-50"
+              disabled>
+        Send
+      </button>
+    </div>
+
+    <div id="error-message" class="text-red-400 text-center hidden"></div>
+  </div>
+
+  <script>
+    const BACKEND_URL = 'http://128.205.43.167:5000';
+    const characterSelect = document.getElementById('character-select');
+    const chatArea = document.getElementById('chat-area');
+    const userInput = document.getElementById('user-input');
+    const sendButton = document.getElementById('send-button');
+    const errorDiv = document.getElementById('error-message');
+    let initialMessageDiv = document.getElementById('initial-message');
+    let selectedCharacter = null;
+    let chatHistory = [];
+    let sending = false;
+
+    function displayMessage(role, text) {
+      if (initialMessageDiv) {
+        initialMessageDiv.remove();
+        initialMessageDiv = null;
+      }
+      const container = document.createElement('div');
+      container.classList.add('flex', role === 'user' ? 'justify-end' : 'justify-start');
+
+      const bubble = document.createElement('div');
+      bubble.classList.add('max-w-[70%]', 'p-3', 'rounded-lg', 'shadow-md');
+      bubble.classList.add(role === 'user' ? 'user-bubble' : 'assistant-bubble');
+      bubble.textContent = text;
+
+      container.appendChild(bubble);
+      chatArea.appendChild(container);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function showTyping() {
+      if (initialMessageDiv) {
+        initialMessageDiv.remove();
+        initialMessageDiv = null;
+      }
+      const typing = document.createElement('div');
+      typing.id = 'typing-indicator';
+      typing.classList.add('flex', 'justify-start');
+      typing.innerHTML = `
+        <div class="max-w-[70%] p-3 rounded-lg shadow-md assistant-bubble flex items-center">
+          <svg class="animate-spin h-4 w-4 text-yellow-500 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+            </path>
+          </svg>
+          Typing…
+        </div>`;
+      chatArea.appendChild(typing);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function hideTyping() {
+      const t = document.getElementById('typing-indicator');
+      if (t) t.remove();
+    }
+
+    function showError(msg) {
+      errorDiv.textContent = `Error: ${msg}`;
+      errorDiv.classList.remove('hidden');
+      setTimeout(() => errorDiv.classList.add('hidden'), 5000);
+    }
+
+    function setInput(enabled) {
+      userInput.disabled = !enabled;
+      sendButton.disabled = !enabled;
+      if (enabled) userInput.focus();
+    }
+
+    async function loadCharacters() {
+      try {
+        const res = await fetch(`${BACKEND_URL}/characters`);
+        const data = await res.json();
+        characterSelect.innerHTML = '<option value="">Select a character</option>';
+        data.characters.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c;
+          opt.textContent = c;
+          characterSelect.appendChild(opt);
+        });
+        characterSelect.disabled = false;
+      } catch (e) {
+        console.error(e);
+        showError("Couldn't load characters. Is the server running?");
+      }
+    }
+
+    characterSelect.addEventListener('change', () => {
+      selectedCharacter = characterSelect.value;
+      chatHistory = [];
+      chatArea.innerHTML = '';
+      if (selectedCharacter) {
+        displayMessage('assistant',
+          `Greetings, I am ${selectedCharacter}. What wisdom do you seek from the wizarding world?`
+        );
+        setInput(true);
+      } else {
+        chatArea.innerHTML = `
+          <div id="initial-message"
+               class="text-gray-400 text-center italic mt-auto">
+            Select a character to begin your magical conversation!
+          </div>`;
+        initialMessageDiv = document.getElementById('initial-message');
+        setInput(false);
+      }
+    });
+
+    async function sendMessage() {
+      const text = userInput.value.trim();
+      if (!text || !selectedCharacter || sending) return;
+
+      sending = true;
+      setInput(false);
+      showTyping();
+
+      displayMessage('user', text);
+      chatHistory.push({ role: 'user', text });
+      userInput.value = '';
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            character_name: selectedCharacter,
+            user_message: text,
+            chat_history: chatHistory
+          })
+        });
+        const payload = await res.json();
+        hideTyping();
+        displayMessage('assistant', payload.response);
+        chatHistory.push({ role: 'assistant', text: payload.response });
+      } catch (e) {
+        console.error(e);
+        hideTyping();
+        showError("Failed to get response. Try again?");
+        displayMessage('assistant',
+          "I apologize, a magical disturbance interrupted my thoughts. Could you repeat that?"
+        );
+      } finally {
+        sending = false;
+        setInput(true);
+      }
+    }
+
+    sendButton.addEventListener('click', sendMessage);
+    userInput.addEventListener('keypress', e => {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    document.addEventListener('DOMContentLoaded', loadCharacters);
+  </script>
+</body>
+</html>
